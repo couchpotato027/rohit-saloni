@@ -2,7 +2,7 @@
 """Generate the themed invitation variants from the full-card page.
 
 Reads  index.html + style.css (the full card, the single source of truth)
-Writes sangeet/, sangeet-wedding/ and dec-1-2/ (each: index.html + style.css)
+Writes one self-contained, deploy-ready site per variant into ../dist/<repo-name>/
 
 Photos, family names and the footer stay identical; only the invitation
 (events, hero copy, venue, theme colours) changes per variant.
@@ -10,9 +10,10 @@ Re-run after editing the full card:  python3 tools/build_variants.py
 """
 import re
 import pathlib
+import shutil
+import sys
 
 SITE = pathlib.Path(__file__).resolve().parent.parent
-BASE_URL = "https://couchpotato027.github.io/rohit-saloni"
 SRC_HTML = (SITE / "index.html").read_text(encoding="utf-8")
 SRC_CSS = (SITE / "style.css").read_text(encoding="utf-8")
 
@@ -212,7 +213,8 @@ VARIANTS = {
                               [("The Evening", "Tuesday · 1 December 2026", [SANGEET])]),
         venue=venue_section("Utsav Lawn", "Join us at Utsav Lawn, Shree Ram International, Jodhpur, for a night of music, dance and dinner under the stars.",
                             [("Utsav Lawn", "Sangeet · 7:30 PM onwards")]),
-        song_file="audio/sangeet.mp3", song_title="Gallan Goodiyaan",
+        repo="rohit-saloni-sangeet", cards=(6,),
+        song_src="sangeet-gallan.mp3", song_title="Gallan Goodiyaan",
         fairy=True,
     ),
     "sangeet-wedding": dict(
@@ -235,7 +237,9 @@ VARIANTS = {
                                ("Day Two", "Wednesday · 2 December 2026", [WEDDING])]),
         venue=venue_section("Shree Ram <br>International", "The Sangeet and the Reception unfold at Utsav Lawn, Shree Ram International, Jodhpur. The Baraat sets out from the residence “Satyam”.",
                             [("Utsav Lawn", "Sangeet &amp; Reception"), ("Residence “Satyam”", "Baraat departure")]),
-        song_file=None, song_title=None, fairy=False,
+        repo="rohit-saloni-wedding", cards=(6, 8),
+        song_src="aaj-sajeya.mp3", song_title="Aaj Sajeya",
+        fairy=False,
     ),
     "dec-1-2": dict(
         theme=SUNRISE,
@@ -255,25 +259,65 @@ VARIANTS = {
         events=events_section("Wedding Events", "Full-day celebrations across the 1st &amp; 2nd of December. Tap any card to see the invitation.",
                               [("Day One", "Tuesday · 1 December 2026", [CARNIVAL, TILAK, SANGEET]),
                                ("Day Two", "Wednesday · 2 December 2026", [MAYRA, WEDDING])]),
-        venue=None, song_file=None, song_title=None, fairy=False,
+        venue=None,
+        repo="rohit-saloni-invitation", cards=(1, 4, 5, 6, 7, 8),
+        song_src="aaj-sajeya.mp3", song_title="Aaj Sajeya",
+        fairy=False,
     ),
 }
 
 ROOT_INVITE = "cordially solicits your gracious presence on the auspicious occasion of the wedding of her beloved grandson"
 
 
-def build(slug, v):
+DIST = SITE.parent / "dist"
+SONGS = SITE / "tools" / "songs"
+
+VERCEL_JSON = """{
+  "cleanUrls": true,
+  "headers": [
+    {
+      "source": "/(img|cards|audio)/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ]
+}
+"""
+
+README = """# {name}
+
+Static wedding-invitation site for Rohit &amp; Saloni (no build step).
+
+**Deploy:** import this repo in Vercel (framework preset: *Other*, no build command,
+output directory: the repo root), or enable GitHub Pages on `main` / root.
+
+- `index.html`, `style.css`, `script.js` — the page
+- `img/`, `cards/`, `audio/song.mp3` — assets
+- `vercel.json` — caching and basic security headers
+
+Link-preview tags in `index.html` point at `{url}`; change them if you deploy to a different address.
+"""
+
+
+def build(key, v):
+    repo = v["repo"]
+    url = f"https://{repo}.vercel.app/"
     html = SRC_HTML
-    url = f"{BASE_URL}/{slug}/"
     html = swap_re(html, r"<title>.*?</title>", f"<title>{v['title']}</title>")
     html = swap_re(html, r'<meta name="description" content="[^"]*">', f'<meta name="description" content="{v["desc"]}">')
     html = swap_re(html, r'<meta name="theme-color" content="[^"]*">', f'<meta name="theme-color" content="{v["theme_color"]}">')
     html = swap_re(html, r'<meta property="og:title" content="[^"]*">', f'<meta property="og:title" content="{v["title"]}">')
     html = swap_re(html, r'<meta property="og:description" content="[^"]*">', f'<meta property="og:description" content="{v["desc"]}">')
     html = swap_re(html, r'<meta property="og:url" content="[^"]*">', f'<meta property="og:url" content="{url}">')
+    html = swap_re(html, r'<meta property="og:image" content="[^"]*">', f'<meta property="og:image" content="{url}img/og.jpg">')
 
-    html = swap(html, '<body class="locked">',
-                f'<body class="locked" data-root="../" data-first="{v["first"]}"{v["body_extra"]}>')
+    html = swap(html, '<body class="locked">', f'<body class="locked" data-first="{v["first"]}"{v["body_extra"]}>')
     html = swap_re(html, r'src="cards/card-1\.jpg" alt="[^"]*"', f'src="{v["gate"]}" alt="{v["gate_alt"]}"')
 
     html = swap_re(html, r'srcset="img/main-wide\.jpg"', f'srcset="{v["hero_wide"]}"')
@@ -290,22 +334,34 @@ def build(slug, v):
     html = swap_block(html, "EVENTS", v["events"])
     if v["venue"]:
         html = swap_block(html, "VENUE", v["venue"])
-    if v["song_file"]:
-        html = swap(html, 'src="audio/song.mp3"', f'src="{v["song_file"]}"')
-        html = swap(html, "<b>Perfect</b>", f'<b>{v["song_title"]}</b>')
-        html = swap(html, 'id="songTitle">Perfect<', f'id="songTitle">{v["song_title"]}<')
+    html = swap(html, "<b>Perfect</b>", f'<b>{v["song_title"]}</b>')
+    html = swap(html, 'id="songTitle">Perfect<', f'id="songTitle">{v["song_title"]}<')
 
-    # the variant lives one folder down: point shared assets at the parent folder
-    html = re.sub(r'(src|srcset|data-lb|href)="(img|cards|audio)/', r'\1="../\2/', html)
-    html = html.replace('href="favicon.svg"', 'href="../favicon.svg"').replace('src="script.js"', 'src="../script.js"')
+    out = DIST / repo
+    out.mkdir(parents=True, exist_ok=True)
+    for child in out.iterdir():  # rebuild cleanly but keep the git history
+        if child.name == ".git":
+            continue
+        shutil.rmtree(child) if child.is_dir() else child.unlink()
 
-    out = SITE / slug
-    out.mkdir(exist_ok=True)
     (out / "index.html").write_text(html, encoding="utf-8")
     (out / "style.css").write_text(themed_css(v["theme"]), encoding="utf-8")
-    print(f"built {slug}/  ({len(html.splitlines())} lines)")
+    for name in ("script.js", "favicon.svg"):
+        shutil.copy2(SITE / name, out / name)
+    shutil.copytree(SITE / "img", out / "img")
+    (out / "cards").mkdir()
+    for n in v["cards"]:
+        shutil.copy2(SITE / "cards" / f"card-{n}.jpg", out / "cards" / f"card-{n}.jpg")
+    (out / "audio").mkdir()
+    shutil.copy2(SONGS / v["song_src"], out / "audio" / "song.mp3")
+    (out / "vercel.json").write_text(VERCEL_JSON, encoding="utf-8")
+    (out / "README.md").write_text(README.format(name=repo, url=url), encoding="utf-8")
+    (out / ".gitignore").write_text(".DS_Store\n", encoding="utf-8")
+    print(f"built {repo}  ->  {out}")
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        DIST = pathlib.Path(sys.argv[1]).resolve()
     for name, spec in VARIANTS.items():
         build(name, spec)

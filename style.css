@@ -364,3 +364,9 @@ body[data-fx="lights"] .hero::after { content: ""; position: absolute; inset: -3
   background: conic-gradient(from 0deg at 50% 100%, transparent 0 38deg, rgba(255,214,120,.2) 50deg, transparent 64deg 118deg, rgba(231,120,160,.18) 134deg, transparent 150deg);
   animation: sweep 9s ease-in-out infinite alternate; }
 @keyframes sweep { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+
+/* ===== Designer credit: tiny, bottom-left corner (the music button sits bottom-right) ===== */
+.footer { position: relative; }
+.credit { position: absolute; left: .9rem; bottom: .55rem; margin: 0; font-family: var(--font-ui); font-size: .58rem; letter-spacing: .08em; color: var(--gold-light); opacity: .55; }
+.credit a { border-bottom: 1px solid transparent; transition: border-color .3s; }
+.credit a:hover { border-color: currentColor; }

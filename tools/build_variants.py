@@ -212,7 +212,7 @@ VARIANTS = {
                               [("The Evening", "Tuesday · 1 December 2026", [SANGEET])]),
         venue=venue_section("Utsav Lawn", "Join us at Utsav Lawn, Shree Ram International, Jodhpur, for a night of music, dance and dinner under the stars.",
                             [("Utsav Lawn", "Sangeet · 7:30 PM onwards")]),
-        song_file="audio/sangeet.mp3", song_title="Sangeet Song",
+        song_file="audio/sangeet.mp3", song_title="Gallan Goodiyaan",
         fairy=True,
     ),
     "sangeet-wedding": dict(

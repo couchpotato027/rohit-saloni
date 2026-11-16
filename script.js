@@ -11,7 +11,24 @@
   const hasGsap = typeof window.gsap !== "undefined";
   const $ = (s, c = document) => c.querySelector(s);
   const $$ = (s, c = document) => [...c.querySelectorAll(s)];
-  const FIRST_EVENT = new Date("2026-11-30T09:15:00+05:30").getTime();
+  // Page variants (sangeet, wedding, ...) set data-first / data-root / data-fx / data-particles on <body>.
+  const BODY = document.body.dataset;
+  const ROOT = BODY.root || "";
+  const NOTES = BODY.particles === "notes";
+  const FIRST_EVENT = new Date(BODY.first || "2026-11-30T09:15:00+05:30").getTime();
+
+  /* ---------- Hanging string lights (sangeet pages) ---------- */
+  const fairy = $(".fairy");
+  if (fairy && !reduce) {
+    for (let i = 0; i < 26; i++) {
+      const s = document.createElement("i");
+      s.style.left = (i / 26) * 100 + Math.random() * 2 + "%";
+      s.style.setProperty("--h", 14 + Math.random() * 34 + "vh");
+      s.style.setProperty("--d", 2 + Math.random() * 3 + "s");
+      s.style.animationDelay = -Math.random() * 4 + "s";
+      fairy.appendChild(s);
+    }
+  }
 
   /* ---------- Split hero names into letters ---------- */
   $$("[data-split]").forEach((el) => {
@@ -49,7 +66,8 @@
   const canvas = $("#petals");
   const ctx = canvas.getContext("2d");
   let W = 0, H = 0, petals = [], burst = 0, rafId = 0;
-  const COLORS = ["#f6d9d8", "#ffffff", "#f2b9c4", "#efd9a0", "#fbe9e7"];
+  const COLORS = NOTES ? ["#f1d28a", "#ffffff", "#e7b4c8", "#f3c969"] : ["#f6d9d8", "#ffffff", "#f2b9c4", "#efd9a0", "#fbe9e7"];
+  const GLYPHS = ["♪", "♫"]; // widely supported music glyphs (♬ shows as a box on some devices)
   function resize() {
     const dpr = Math.min(devicePixelRatio || 1, 2);
     W = innerWidth; H = innerHeight;
@@ -60,7 +78,8 @@
     return {
       x: Math.random() * W,
       y: fromTop ? -20 - Math.random() * H * 0.5 : Math.random() * H,
-      r: 3 + Math.random() * 5,
+      r: NOTES ? 6 + Math.random() * 6 : 3 + Math.random() * 5,
+      g: GLYPHS[(Math.random() * GLYPHS.length) | 0],
       vy: 0.4 + Math.random() * 0.8,
       vx: -0.3 + Math.random() * 0.6,
       rot: Math.random() * Math.PI * 2,
@@ -76,9 +95,15 @@
     ctx.rotate(p.rot);
     ctx.globalAlpha = p.a;
     ctx.fillStyle = p.c;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, p.r, p.r * 0.55, 0, 0, Math.PI * 2);
-    ctx.fill();
+    if (NOTES) {
+      ctx.font = `${p.r * 3}px "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols 2", serif`;
+      ctx.textAlign = "center";
+      ctx.fillText(p.g, 0, 0);
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.r, p.r * 0.55, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
   function loop() {
@@ -318,7 +343,7 @@
     const openLb = (src, alt = "") => { lbImg.src = src; lbImg.alt = alt; lb.hidden = false; $("#lbClose").focus(); };
     const closeLb = () => { lb.hidden = true; lbImg.removeAttribute("src"); };
     $$("[data-lb]").forEach((f) => f.addEventListener("click", () => openLb(f.dataset.lb, $("img", f)?.alt)));
-    $$("[data-card]").forEach((b) => b.addEventListener("click", () => openLb(`cards/card-${b.dataset.card}.jpg`, "Invitation card")));
+    $$("[data-card]").forEach((b) => b.addEventListener("click", () => openLb(`${ROOT}cards/card-${b.dataset.card}.jpg`, "Invitation card")));
     lb.addEventListener("click", (e) => { if (e.target !== lbImg) closeLb(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !lb.hidden) closeLb(); });
 
